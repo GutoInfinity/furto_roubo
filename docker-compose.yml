@@ -1,5 +1,3 @@
-# Opção "tudo junto" no Coolify (Build Pack: Docker Compose): sistema + MariaDB.
-# Defina no Coolify: DB_PASS, DB_ROOT_PASS e APP_KEY (32+ caracteres). OPENAI_KEY/OPENAI_MODEL são opcionais.
 services:
   app:
     build: .
@@ -9,25 +7,39 @@ services:
       DB_PORT: 3306
       DB_NAME: axioma_furto_roubo
       DB_USER: sistema_fb
-      DB_PASS: ${DB_PASS}
-      APP_KEY: ${APP_KEY}
-      OPENAI_KEY: ${OPENAI_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      DB_PASS: '${DB_PASS}'
+      APP_KEY: '${APP_KEY}'
+      OPENAI_KEY: '${OPENAI_KEY:-}'
+      OPENAI_MODEL: '${OPENAI_MODEL:-}'
     volumes:
-      - storage:/var/www/html/storage
+      - 'storage:/var/www/html/storage'
     depends_on:
       - db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=lsdzrydwdxeahxjjcptlmhyo"
+      - "traefik.http.services.furto.loadbalancer.server.port=80"
+      - "traefik.http.middlewares.furto-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.furto-http.rule=Host(`furto.centrocorporativo.com.br`)"
+      - "traefik.http.routers.furto-http.entrypoints=web"
+      - "traefik.http.routers.furto-http.middlewares=furto-https-redirect"
+      - "traefik.http.routers.furto-http.service=furto"
+      - "traefik.http.routers.furto-https.rule=Host(`furto.centrocorporativo.com.br`)"
+      - "traefik.http.routers.furto-https.entrypoints=websecure"
+      - "traefik.http.routers.furto-https.tls=true"
+      - "traefik.http.routers.furto-https.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.furto-https.service=furto"
   db:
-    image: mariadb:11.4
+    image: 'mariadb:11.4'
     restart: unless-stopped
     environment:
       MARIADB_DATABASE: axioma_furto_roubo
       MARIADB_USER: sistema_fb
-      MARIADB_PASSWORD: ${DB_PASS}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS}
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      MARIADB_PASSWORD: '${DB_PASS}'
+      MARIADB_ROOT_PASSWORD: '${DB_ROOT_PASS}'
+    command: '--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci'
     volumes:
-      - db:/var/lib/mysql
+      - 'db:/var/lib/mysql'
 volumes:
   storage:
   db:
