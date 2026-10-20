@@ -13,9 +13,9 @@ async function render(context){
  const last=info.last_export?lastExport(info.last_export):'';
  host.innerHTML='<div class="import-grid for024-grid">'
   +card('<i class="fas fa-file-pdf"></i> Relatório PDF do WebAssist',pdfForm()+'<p class="small text-secondary mt-3 mb-0">Para editar cidade e UF e escolher o tipo de Excel, use o <a href="#painel/monitoramento">Painel de monitoramento</a>.</p>')
-  +card('<i class="fas fa-file-excel"></i> FOR 024 · Controle de Roubos e Furtos',template+'<p class="small text-secondary">'+ctx.num(info.imported)+' ocorrência(s) do FOR 024 no sistema (PDF e histórico). Cidade, UF, rastreador e furto/roubo não vêm no PDF: ficam em branco até serem preenchidos no painel de monitoramento.</p><div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" id="for024-export" '+(info.template?'':'disabled')+'><i class="fas fa-download"></i> Exportar FOR 024</button><label class="btn btn-outline-secondary mb-0" for="for024-template-file"><i class="fas fa-upload"></i> '+(info.template?'Atualizar modelo':'Enviar modelo FOR 024')+'</label><input id="for024-template-file" type="file" accept=".xlsx" hidden></div>'+last)
+  +card('<i class="fas fa-file-excel"></i> FOR 024 · Controle de Roubos e Furtos',template+'<p class="small text-secondary">'+ctx.num(info.imported)+' ocorrência(s) do FOR 024 no sistema (PDF e histórico). Cidade, UF, rastreador e furto/roubo não vêm no PDF: ficam em branco até serem preenchidos no painel de monitoramento.</p><div class="d-flex flex-wrap gap-2"><button class="btn btn-primary" id="for024-export"><i class="fas fa-download"></i> Exportar FOR 024</button><label class="btn btn-outline-secondary mb-0" for="for024-template-file"><i class="fas fa-upload"></i> '+(info.template?'Atualizar modelo':'Enviar modelo FOR 024')+'</label><input id="for024-template-file" type="file" accept=".xlsx" hidden></div>'+last)
   +'</div>'+importsList(info.imports||[])+'<div id="for024-preview" class="mt-4"></div>';
- bindImports(()=>render(ctx));$('#for024-pdf-form').onsubmit=e=>readPdf(e,()=>render(ctx));$('#for024-export').onclick=e=>exportFile({modo:'historico'},e.currentTarget,()=>render(ctx));$('#for024-template-file').onchange=e=>uploadTemplate(e,()=>render(ctx));
+ bindImports(()=>render(ctx));$('#for024-pdf-form').onsubmit=e=>readPdf(e,()=>render(ctx));$('#for024-export').onclick=e=>!info.template?(ctx.toast('Envie primeiro a planilha FOR 024 que será usada como modelo. Depois clique em exportar de novo.',true),$('#for024-template-file').click()):exportFile({modo:'historico'},e.currentTarget,()=>render(ctx));$('#for024-template-file').onchange=e=>uploadTemplate(e,()=>render(ctx));
 }
 function lastExport(r){
  const skipped=r.skipped||[];return '<details class="mt-3"><summary>Última exportação · '+ctx.esc(ctx.date(r.at))+' · '+ctx.num((r.added||[]).length)+' linha(s) nova(s), '+ctx.num(skipped.length)+' fora</summary>'
@@ -45,7 +45,10 @@ function showPreview(p,onDone){
 }
 /** params: {modo:'historico'|'sistema'} ou {ids:[…]} (somente as selecionadas). */
 async function exportFile(params,button,after=null){
- if(!button)return;if(params.ids&&!params.ids.length)return;button.disabled=true;const label=button.innerHTML;button.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Gerando…';
+ if(!button)return;if(params.ids&&!params.ids.length)return;
+ // Sem modelo no servidor: explica e já abre a escolha da planilha (o botão nunca fica "morto").
+ if(monitorData&&!monitorData.template){ctx.toast('Envie primeiro a planilha FOR 024 que será usada como modelo. Depois clique em exportar de novo.',true);$('#monitor-template-file')?.click();return;}
+ button.disabled=true;const label=button.innerHTML;button.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Gerando…';
  const name={historico:'CONTROLE_DE_ROUBOS_E_FURTOS',sistema:'SISTEMA_COMPLETO'}[params.modo]||'SELECIONADAS';
  try{const response=await fetch('api.php?'+new URLSearchParams(params.ids?{action:'for024_export',ids:params.ids.join(',')}:{action:'for024_export',modo:params.modo}),{credentials:'same-origin'});if(!response.ok){let message='Não foi possível exportar o FOR 024.';try{message=(await response.json()).error||message;}catch(e){}throw Error(message);}
   const added=Number(response.headers.get('X-For024-Added')||0),skipped=Number(response.headers.get('X-For024-Skipped')||0);
@@ -87,8 +90,8 @@ function monitorActions(){
   +'<section><h4><span class="step-number">2</span> Preencher no sistema</h4><p class="small text-secondary">Cidade, UF, rastreador e furto/roubo não vêm no PDF: ficam em branco. Preencha direto na tabela abaixo; cada alteração é salva na hora e vai para o Excel.</p>'
   +'<label class="btn btn-sm btn-outline-secondary mb-0" for="monitor-history-file"><i class="fas fa-file-import"></i> Importar histórico do Excel</label><input id="monitor-history-file" type="file" accept=".xlsx" hidden><p class="small text-secondary mt-2 mb-0">Traz para o sistema as linhas já lançadas no FOR 024 (todas as abas por ano).</p></section>'
   +'<section><h4><span class="step-number">3</span> Exportar o Excel</h4><div class="d-grid gap-2">'
-  +'<button type="button" class="btn btn-primary" data-for024-export="historico" '+(tpl?'':'disabled')+' title="Planilha modelo inteira, com o histórico dela, mais as ocorrências do PDF ainda não lançadas"><i class="fas fa-layer-group"></i> Modelo completo com histórico</button>'
-  +'<button type="button" class="btn btn-outline-primary" data-for024-export="sistema" '+(tpl?'':'disabled')+' title="Excel novo com o visual do FOR 024, só com os dados do sistema (histórico importado + PDFs, com as edições)"><i class="fas fa-file-circle-plus"></i> Excel novo com os dados do sistema</button>'
+  +'<button type="button" class="btn btn-primary" data-for024-export="historico" title="Planilha modelo inteira, com o histórico dela, mais as ocorrências do PDF ainda não lançadas"><i class="fas fa-layer-group"></i> Modelo completo com histórico</button>'
+  +'<button type="button" class="btn btn-outline-primary" data-for024-export="sistema" title="Excel novo com o visual do FOR 024, só com os dados do sistema (histórico importado + PDFs, com as edições)"><i class="fas fa-file-circle-plus"></i> Excel novo com os dados do sistema</button>'
   +'<button type="button" class="btn btn-outline-primary" id="monitor-export-selected" disabled><i class="fas fa-square-check"></i> Somente as selecionadas</button></div>'
   +'<label class="small mt-2 d-inline-block" for="monitor-template-file" role="button"><i class="fas fa-upload"></i> '+(tpl?'Atualizar modelo FOR 024':'Enviar modelo FOR 024 (necessário para exportar)')+'</label><input id="monitor-template-file" type="file" accept=".xlsx" hidden></section>'
   +'</div><div id="for024-preview" class="mt-3"></div></div></article>';
@@ -130,8 +133,8 @@ async function afterMonitorImport(result,p){
  await monitor(ctx);const host=$('#for024-preview');if(!host)return;
  const ids=result.ids||[];selected=new Set(ids);drawTable();
  host.innerHTML='<div class="alert alert-success monitor-choice"><div><strong>'+ctx.num(result.inserted)+' ocorrência(s) importada(s) de '+ctx.esc(p.filename)+'.</strong> Já estão marcadas na tabela. Preencha cidade e UF se quiser e escolha como gerar o Excel:</div><div class="d-flex flex-wrap gap-2 mt-2">'
-  +'<button type="button" class="btn btn-primary btn-sm" data-choice="historico" '+(monitorData.template?'':'disabled')+'><i class="fas fa-layer-group"></i> Modelo completo com histórico</button>'
-  +'<button type="button" class="btn btn-outline-primary btn-sm" data-choice="pdf" '+(ids.length&&monitorData.template?'':'disabled')+'><i class="fas fa-file-pdf"></i> Somente as deste PDF ('+ctx.num(ids.length)+')</button></div></div>';
+  +'<button type="button" class="btn btn-primary btn-sm" data-choice="historico"><i class="fas fa-layer-group"></i> Modelo completo com histórico</button>'
+  +'<button type="button" class="btn btn-outline-primary btn-sm" data-choice="pdf" '+(ids.length?'':'disabled')+'><i class="fas fa-file-pdf"></i> Somente as deste PDF ('+ctx.num(ids.length)+')</button></div></div>';
  host.querySelector('[data-choice="historico"]').onclick=e=>exportFile({modo:'historico'},e.currentTarget);
  host.querySelector('[data-choice="pdf"]').onclick=e=>exportFile({ids},e.currentTarget);
 }
@@ -156,7 +159,7 @@ function editor(r,field){
  const list=options.includes(value)||!value?options:[value,...options];
  return '<select class="form-select form-select-sm monitor-edit" data-edit="'+field+'" data-id="'+r.id+'" aria-label="'+ctx.esc(label)+'"><option value="">—</option>'+list.map(o=>'<option'+(o===value?' selected':'')+'>'+ctx.esc(o)+'</option>').join('')+'</select>';
 }
-function updateSelected(){const bar=$('#monitor-selection');if(bar){bar.hidden=!selected.size;$('#monitor-selection-text').innerHTML='<strong>'+ctx.num(selected.size)+'</strong> ocorrência(s) selecionada(s) · Excel no modelo FOR 024 (mesmo visual, cabeçalho e estilos)';const b=$('#monitor-export-bar');b.disabled=!monitorData.template;b.title=monitorData.template?'':'Envie o modelo FOR 024 para exportar';}const b=$('#monitor-export-selected');if(b){b.disabled=!selected.size||!monitorData.template;b.innerHTML='<i class="fas fa-square-check"></i> Somente as selecionadas'+(selected.size?' ('+ctx.num(selected.size)+')':'');}}
+function updateSelected(){const bar=$('#monitor-selection');if(bar){bar.hidden=!selected.size;$('#monitor-selection-text').innerHTML='<strong>'+ctx.num(selected.size)+'</strong> ocorrência(s) selecionada(s) · Excel no modelo FOR 024 (mesmo visual, cabeçalho e estilos)';const b=$('#monitor-export-bar');b.disabled=false;b.title=monitorData.template?'':'Envie o modelo FOR 024 para exportar';}const b=$('#monitor-export-selected');if(b){b.disabled=!selected.size;b.innerHTML='<i class="fas fa-square-check"></i> Somente as selecionadas'+(selected.size?' ('+ctx.num(selected.size)+')':'');}}
 function drawTable(){
  const host=$('#monitor-table');if(!host){updateSelected();return;}const visible=visibleRows(),rows=visible.slice(0,shown),all=visible.length&&visible.every(r=>selected.has(r.id));
  host.innerHTML=rows.length?'<div class="table-responsive"><table class="table table-hover monitor-table"><thead><tr><th class="monitor-check"><input type="checkbox" id="monitor-select-all" aria-label="Selecionar todas as ocorrências visíveis" '+(all?'checked':'')+'></th><th>Registro / placa</th><th>Data</th><th>Cliente / beneficiário</th><th>Veículo</th><th>Cidade</th><th>UF</th><th>Tipo</th><th>Rastreador</th><th>Localizado</th><th>Furto/Roubo</th></tr></thead><tbody>'
