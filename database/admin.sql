@@ -1,0 +1,1 @@
+INSERT INTO fb_users(name,email,password_hash) VALUES ('Administrador','admin@centrocorporativo.com.br','$2y$10$YCljCH3ScRZ75O9onPljTeunotgPGlJW/aSeGSC/nA3VFShFlybJK') ON DUPLICATE KEY UPDATE email=VALUES(email);

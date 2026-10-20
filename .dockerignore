@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+documento
+entrega
+tests
+storage/imports/*
+storage/templates/*
+storage/logs/*
+database/dados-iniciais.sql
+scripts/build-release.php
+*.md
+docker-compose.yml

@@ -1,0 +1,19 @@
+# Configuração privada (senhas, APP_KEY, chave da IA)
+.env
+
+# Dados reais de clientes: não vão para o GitHub
+database/dados-iniciais.sql
+documento/
+storage/imports/*
+storage/templates/*
+storage/logs/*
+!storage/**/.gitkeep
+!storage/.htaccess
+entrega/
+tests/*.png
+
+# Sistema/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

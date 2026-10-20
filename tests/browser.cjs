@@ -1,0 +1,17 @@
+const {chromium}=require('../../tmp/amcharts-tests/node_modules/playwright');
+const assert=require('node:assert/strict');
+const path=require('node:path');
+(async()=>{const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});
+try{const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+const base='http://localhost/bate_pronto/sistema-FB/';
+assert.equal((await page.request.get(base+'api.php?action=list')).status(),401);
+for(const p of ['.env','database/schema.sql','app/bootstrap.php'])assert.equal((await page.request.get(base+p)).status(),403);
+await page.goto(base);await page.locator('#login-email').fill('admin@centrocorporativo.com.br');await page.locator('#login-password').fill(process.env.FB_TEST_PASSWORD||'');await page.locator('#login-form button').click();await page.locator('#chart-months').waitFor();await page.waitForTimeout(600);
+await page.screenshot({path:path.join(__dirname,'painel-desktop.png'),fullPage:true});
+await page.goto(base+'#ocorrencias');await page.locator('[name=evento]').selectOption('Roubo');await page.waitForTimeout(700);assert.equal(await page.locator('#list-section tbody tr').count(),2);
+await page.goto(base+'#importacao');await page.locator('[name=file]').setInputFiles('C:/Users/admin/Downloads/11 AANESC.xlsx');await page.locator('#upload-form button').click();await page.locator('#import-preview table').waitFor();assert.match(await page.locator('#import-preview').innerText(),/474/);await page.screenshot({path:path.join(__dirname,'importacao.png'),fullPage:true});
+await page.goto(base+'#ia');await page.locator('#assistant-question').waitFor();assert.equal(await page.locator('#assistant-question').isVisible(),true);
+await page.goto(base+'#configuracoes');await page.locator('#password-form').waitFor();
+await page.setViewportSize({width:390,height:844});await page.goto(base+'#painel');await page.locator('#chart-months').waitFor();await page.waitForTimeout(500);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(__dirname,'painel-celular.png'),fullPage:true});
+assert.deepEqual(errors,[]);console.log('Navegador: login, isolamento, filtros, previa real XLSX, assistente, configuracoes e celular aprovados.');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
