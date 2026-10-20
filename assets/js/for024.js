@@ -93,7 +93,7 @@ function monitorActions(){
   +'<button type="button" class="btn btn-primary" data-for024-export="historico" title="Planilha modelo inteira, com o histórico dela, mais as ocorrências do PDF ainda não lançadas"><i class="fas fa-layer-group"></i> Modelo completo com histórico</button>'
   +'<button type="button" class="btn btn-outline-primary" data-for024-export="sistema" title="Excel novo com o visual do FOR 024, só com os dados do sistema (histórico importado + PDFs, com as edições)"><i class="fas fa-file-circle-plus"></i> Excel novo com os dados do sistema</button>'
   +'<button type="button" class="btn btn-outline-primary" id="monitor-export-selected" disabled><i class="fas fa-square-check"></i> Somente as selecionadas</button></div>'
-  +'<label class="small mt-2 d-inline-block" for="monitor-template-file" role="button"><i class="fas fa-upload"></i> '+(tpl?'Atualizar modelo FOR 024':'Enviar modelo FOR 024 (necessário para exportar)')+'</label><input id="monitor-template-file" type="file" accept=".xlsx" hidden></section>'
+  +'<label class="btn btn-sm '+(tpl?'btn-outline-secondary':'btn-warning')+' mt-2 mb-0" for="monitor-template-file" title="Planilha FOR 024 usada como modelo na exportação"><i class="fas fa-upload"></i> '+(tpl?'Atualizar modelo FOR 024':'Enviar modelo FOR 024')+'</label>'+(tpl?'':'<p class="small text-secondary mt-1 mb-0">Necessário uma vez para exportar.</p>')+'<input id="monitor-template-file" type="file" accept=".xlsx" hidden></section>'
   +'</div><div id="for024-preview" class="mt-3"></div></div></article>';
 }
 async function monitor(context){
