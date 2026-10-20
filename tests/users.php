@@ -1,0 +1,51 @@
+<?php
+declare(strict_types=1);
+if(PHP_SAPI!=='cli')exit;
+require dirname(__DIR__).'/app/bootstrap.php';
+$server=new PDO('mysql:host='.fb_env('DB_HOST','127.0.0.1').';port='.fb_env('DB_PORT','3306').';charset=utf8mb4',fb_env('DB_USER'),fb_env('DB_PASS'),[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+$name='fb_users_test_'.bin2hex(random_bytes(6));$server->exec("CREATE DATABASE `$name` CHARACTER SET utf8mb4");$server->exec("USE `$name`");$db=$server;$checks=0;
+$check=static function(bool $ok,string $label)use(&$checks){if(!$ok)throw new RuntimeException($label);$checks++;};
+$reject=static function(callable $fn,string $label)use($check){try{$fn();}catch(InvalidArgumentException|DomainException $e){$check(true,$label);return;}$check(false,$label);};
+$keep=in_array('--keep',$argv,true);
+try{
+ $db->exec(file_get_contents(FB_ROOT.'/database/schema.sql'));
+ $password=bin2hex(random_bytes(12));$hash=password_hash($password,PASSWORD_DEFAULT);
+ $db->prepare('INSERT INTO fb_users(name,email,password_hash) VALUES(?,?,?)')->execute(['Administrador de teste','admin@test.invalid',$hash]);
+ $db->prepare('INSERT INTO fb_users(name,email,password_hash) VALUES(?,?,?)')->execute(['Conta anterior','legacy@test.invalid',$hash]);
+ $migration=file_get_contents(FB_ROOT.'/database/atualizacao-usuarios.sql');$db->exec($migration);
+ $check(Users::find($db,1)['role']==='admin','Primeiro usuário é administrador');
+ $check(Users::find($db,2)['role']==='operator','Demais contas são operadores');
+ $check($db->query('SELECT password_hash FROM fb_users WHERE id=1')->fetchColumn()===$hash,'Migração preserva senha');
+ $operator=Users::save($db,['name'=>'Operador','email'=>'operator@test.invalid','password'=>$password,'role'=>'operator'],1);
+ $viewer=Users::save($db,['name'=>'Consulta','email'=>'viewer@test.invalid','password'=>$password,'role'=>'viewer'],1);
+ $reject(fn()=>Users::save($db,['name'=>'Duplicado','email'=>'operator@test.invalid','password'=>$password],1),'E-mail duplicado bloqueado');
+ $reject(fn()=>Users::save($db,['name'=>'Escalada','email'=>'escalada@test.invalid','password'=>$password],$operator['id']),'Operador não administra contas');
+ $reject(fn()=>Users::save($db,['id'=>1,'name'=>'Administrador','email'=>'admin@test.invalid','role'=>'viewer'],1),'Último administrador protegido');
+ $reject(fn()=>Users::save($db,['id'=>1,'name'=>'Administrador','email'=>'admin@test.invalid','role'=>'admin','active'=>false],1),'Autodesativação bloqueada');
+ $reject(fn()=>Users::save($db,['name'=>'Invalido','email'=>'bad@test.invalid','password'=>$password,'permissions'=>['read','users']],1),'Permissão administrativa exclusiva');
+ $reject(fn()=>Users::save($db,['name'=>'Fraca','email'=>'weak@test.invalid','password'=>'123'],1),'Senha fraca bloqueada');
+ $reject(fn()=>Users::authorize($viewer,'save','POST'),'Consulta não grava');
+ $reject(fn()=>Users::authorize($viewer,'for024_update','POST'),'Consulta não edita monitoramento');
+ $reject(fn()=>Users::authorize($viewer,'export','GET'),'Consulta não exporta');
+ $reject(fn()=>Users::authorize($operator,'settings','POST'),'Operador não configura IA');
+ Users::authorize($viewer,'list','GET');$check(true,'Consulta pode ler');
+ Users::authorize($operator,'save','POST');$check(true,'Operador pode editar');
+ $_SESSION['fb_user']=$operator;
+ $changed=Users::save($db,['id'=>$operator['id'],'name'=>'Operador','email'=>'operator@test.invalid','role'=>'operator','active'=>false],1);
+ $check($changed['session_version']>$operator['session_version'],'Desativação invalida sessões');
+ $check(Users::session($db)===null,'Sessão desativada rejeitada');
+ Users::save($db,['id'=>$operator['id'],'name'=>'Operador','email'=>'operator@test.invalid','role'=>'operator','active'=>true],1);
+ $_SESSION['fb_user']=$operator;$check(Users::session($db)===null,'Reativação não restaura sessão antiga');
+ $oldViewer=$viewer;
+ $viewer=Users::save($db,['id'=>$viewer['id'],'name'=>'Consulta','email'=>'viewer@test.invalid','role'=>'viewer','permissions'=>['read','export']],1);
+ $check(Users::can($viewer,'export'),'Permissão individual aplicada');
+ $_SESSION['fb_user']=$oldViewer;$check(Users::session($db)===null,'Mudança de permissões revoga sessão');
+ $db->exec($migration);$check(Users::can(Users::find($db,$viewer['id']),'export'),'Reexecutar migração preserva permissões');
+ Users::save($db,['id'=>$viewer['id'],'name'=>'Consulta','email'=>'viewer@test.invalid','role'=>'viewer'],1);
+ $check((int)$db->query('SELECT COUNT(*) FROM fb_user_audit')->fetchColumn()>=6,'Alterações de usuários auditadas');
+ $audit=implode('',array_column($db->query('SELECT details_json FROM fb_user_audit')->fetchAll(),'details_json'));
+ $check(strpos($audit,$password)===false&&strpos($audit,$hash)===false,'Auditoria não contém senhas ou hashes');
+ Records::save($db,['placa'=>'ABC1D23','veiculo'=>'Veículo de teste','evento'=>'Furto','data_evento'=>date('Y').'-01-15','etapa'=>'Em buscas','municipio'=>'Cidade de teste/SP'],1,null,null,'Cadastro',false,null,['origem'=>For024::ORIGIN,'ano'=>(int)date('Y'),'planilha'=>['cidade'=>'Cidade de teste','estado'=>'SP','evento'=>'FURTO','localizado'=>'NÃO']]);
+ echo json_encode(['checks'=>$checks,'database'=>$name,'password'=>$keep?$password:null],JSON_THROW_ON_ERROR)."\n";
+}catch(Throwable $e){$keep=false;throw $e;}
+finally{if(!$keep)$server->exec("DROP DATABASE `$name`");}

@@ -107,10 +107,10 @@ async function monitor(context){
  const ids=new Set(monitorData.rows.map(r=>r.id));selected=new Set([...selected].filter(id=>ids.has(id)));
  const t=monitorData.totais,lastPdf=monitorData.imports.find(i=>i.tipo==='pdf');charts.forEach(c=>{try{c.destroy();}catch(e){}});charts=[];
  const years=monitorData.anos.length>1?'<label class="small monitor-year">Ano <select id="monitor-year" class="form-select form-select-sm">'+monitorData.anos.map(y=>'<option'+(y===year?' selected':'')+'>'+y+'</option>').join('')+'</select></label>':'';
- host.innerHTML=monitorActions()
+ host.innerHTML=ctx.welcomePanel(t,{monitorYear:year})+monitorActions()
   +(t.total?'<div class="monitor-heading"><h3>Ocorrências de '+year+'</h3>'+years+'</div><div class="metric-grid">'
-  +metric('Ocorrências',t.total,ctx.num(t.pdf)+' do PDF · '+ctx.num(t.planilha)+' do histórico','car-burst')
-  +metric('Não localizados',t.nao_localizados,t.mais_30?ctx.num(t.mais_30)+' há mais de 30 dias':'Veículo localizado: NÃO','magnifying-glass-location')
+  +metric('Furtos informados',t.furtos,'Ocorrências identificadas como furto neste ano','car')
+  +metric('Roubos informados',t.roubos,'Ocorrências identificadas como roubo neste ano','shield-halved')
   +metric('Localizados',t.localizados,'Veículo localizado ou recuperado','circle-check')
   +metric('Sem cidade',t.sem_cidade,'Preencha na tabela antes de exportar','location-dot')
   +'</div>'
@@ -123,6 +123,7 @@ async function monitor(context){
   :'<article class="card"><div class="card-body text-center py-5"><i class="fas fa-file-pdf fa-2x mb-3 text-secondary"></i><h3 class="card-title">Nenhuma ocorrência do FOR 024 ainda</h3><p class="text-secondary mb-0">Envie o PDF do WebAssist ou importe o histórico do Excel no quadro acima.</p></div></article>')
   +importsList(monitorData.imports);
  bindImports(()=>monitor(ctx));
+ host.querySelectorAll('[data-monitor-records]').forEach(button=>button.onclick=()=>$('#monitor-table')?.scrollIntoView({behavior:'smooth',block:'start'}));
  $('#for024-pdf-form').onsubmit=e=>readPdf(e,afterMonitorImport);
  bindStepsToggle();$('#monitor-history-file').onchange=uploadHistory;$('#monitor-template-file').onchange=e=>uploadTemplate(e,()=>monitor(ctx));
  host.querySelectorAll('[data-for024-export]').forEach(b=>b.onclick=()=>exportFile({modo:b.dataset.for024Export},b,()=>monitor(ctx)));
@@ -150,11 +151,8 @@ async function uploadHistory(e){
 }
 /* ---------- mapa por cidade ---------- */
 let map=null,mapObserver=null;
-const MAP_BINS=[[1,'1'],[2,'2 a 4'],[5,'5 a 9'],[10,'10 a 19'],[20,'20 ou mais']];
-// Um tom só (azul), do claro ao escuro conforme a quantidade; no tema escuro a escala se inverte (mais = mais claro).
-const MAP_COLORS={light:['#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281'],dark:['#1c5cab','#2a78d6','#5598e7','#86b6ef','#b7d3f6']};
+const MAP_CATEGORIES=[['furto','Furto (não localizado)','#eab308'],['roubo','Roubo (não localizado)','#dc3545'],['localizado','Localizado / recuperado','#2fb344'],['nao_informado','Evento não informado','#94a3b8']];
 const mapDark=()=>document.documentElement.dataset.bsTheme==='dark';
-const mapBin=n=>MAP_BINS.reduce((b,[min],i)=>n>=min?i:b,0);
 function mapCard(){
  const m=monitorData.mapa||{pontos:[]},missing=Object.entries(m.nao_encontradas||{});
  const notes=[m.sem_cidade?ctx.num(m.sem_cidade)+' ocorrência(s) sem cidade não aparecem no mapa.':'',missing.length?'Cidades não reconhecidas (confira a grafia): '+missing.map(([c,n])=>ctx.esc(c)+' ('+ctx.num(n)+')').join(', ')+'.':''].filter(Boolean);
@@ -164,18 +162,23 @@ function mapCard(){
 }
 function drawMap(){
  const el=$('#monitor-map');if(map){map.remove();map=null;}if(!el||!window.L)return;
- const dark=mapDark(),colors=MAP_COLORS[dark?'dark':'light'],ring=getComputedStyle(document.documentElement).getPropertyValue('--fb-surface').trim()||(dark?'#1d293b':'#ffffff');
+ const dark=mapDark(),ring=getComputedStyle(document.documentElement).getPropertyValue('--fb-surface').trim()||(dark?'#1d293b':'#ffffff');
  map=L.map(el,{scrollWheelZoom:false,attributionControl:true});
- L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,className:dark?'monitor-map-tiles-dark':'',attribution:'&copy; OpenStreetMap'}).addTo(map);
+ // O OpenStreetMap exige Referer; envia somente a origem nas imagens externas.
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,referrerPolicy:'strict-origin-when-cross-origin',className:dark?'monitor-map-tiles-dark':'',attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
  const points=[...monitorData.mapa.pontos].sort((a,b)=>b.total-a.total);
  // Maiores primeiro: os pontos pequenos ficam por cima e continuam clicáveis.
  for(const p of points){
-  const marker=L.circleMarker([p.lat,p.lng],{radius:Math.min(26,5+Math.sqrt(p.total)*3),color:ring,weight:2,fillColor:colors[mapBin(p.total)],fillOpacity:.9}).addTo(map);
-  marker.bindTooltip('<strong>'+ctx.esc(p.cidade)+'/'+ctx.esc(p.uf)+'</strong><br>'+ctx.num(p.total)+' ocorrência(s)'+(p.nao_localizados?' · '+ctx.num(p.nao_localizados)+' não localizada(s)':''),{direction:'top',offset:[0,-4]});
+  const categories=p.categorias||{nao_informado:p.total},size=Math.min(52,10+Math.sqrt(p.total)*6);
+  let offset=0;
+  const slices=MAP_CATEGORIES.filter(([key])=>categories[key]>0).map(([key,,color])=>{const start=offset;offset+=categories[key]/p.total*100;return color+' '+start+'% '+offset+'%';});
+  const background=slices.length===1?slices[0].split(' ')[0]:'conic-gradient('+slices.join(',')+')';
+  const marker=L.marker([p.lat,p.lng],{icon:L.divIcon({className:'monitor-city-marker',iconSize:[size,size],iconAnchor:[size/2,size/2],html:'<span style="display:block;width:100%;height:100%;border-radius:50%;border:2px solid '+ring+';background:'+background+';box-shadow:0 1px 4px #0005"></span>'})}).addTo(map);
+  marker.bindTooltip('<strong>'+ctx.esc(p.cidade)+'/'+ctx.esc(p.uf)+'</strong><br>'+ctx.num(p.total)+' ocorrência(s)'+MAP_CATEGORIES.filter(([key])=>categories[key]>0).map(([key,label])=>'<br>'+ctx.esc(label)+': '+ctx.num(categories[key])).join(''),{direction:'top',offset:[0,-size/2]});
   marker.on('click',()=>{search=p.cidade;shown=100;const box=$('#monitor-search');if(box)box.value=p.cidade;drawTable();$('#monitor-table')?.scrollIntoView({behavior:'smooth',block:'start'});});
  }
  map.fitBounds(L.latLngBounds(points.map(p=>[p.lat,p.lng])).pad(.15),{maxZoom:8});
- $('#monitor-map-legend').innerHTML='<span class="small text-secondary">Ocorrências:</span>'+MAP_BINS.map(([,label],i)=>'<span class="monitor-map-key"><i style="background:'+colors[i]+';width:'+(8+i*3)+'px;height:'+(8+i*3)+'px"></i>'+label+'</span>').join('');
+ $('#monitor-map-legend').innerHTML=MAP_CATEGORIES.map(([,label,color])=>'<span class="monitor-map-key"><i style="background:'+color+';width:12px;height:12px"></i>'+label+'</span>').join('')+'<span class="small text-secondary">Tamanho: quantidade de ocorrências. Cidades com mais de uma situação exibem as cores em proporção.</span>';
  // Troca de tema claro/escuro: redesenha com o fundo e as cores do tema.
  if(!mapObserver){mapObserver=new MutationObserver(()=>{if($('#monitor-map'))drawMap();});mapObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-bs-theme']});}
 }
@@ -191,6 +194,7 @@ function drawCharts(){
 function visibleRows(){const q=search.trim().toLocaleLowerCase('pt-BR');return monitorData.rows.filter(r=>(!onlyOpen||r.em_busca)&&(!noCity||!r.cidade)&&(!q||[r.placa,r.cliente,r.beneficiario,r.protocolo,r.registro,r.veiculo,r.cidade,r.estado,r.tipo].join(' ').toLocaleLowerCase('pt-BR').includes(q)));}
 function editor(r,field){
  const options=monitorData.editaveis[field]||[],value=r[field]||'',label=FIELD_LABEL[field]+' de '+r.placa;
+ if(ctx.can&&!ctx.can('write'))return '<span>'+ctx.esc(value||'—')+'</span>';
  if(!options.length)return '<input class="form-control form-control-sm monitor-edit" data-edit="'+field+'" data-id="'+r.id+'" value="'+ctx.esc(value)+'" maxlength="120" placeholder="—" aria-label="'+ctx.esc(label)+'">';
  const list=options.includes(value)||!value?options:[value,...options];
  return '<select class="form-select form-select-sm monitor-edit" data-edit="'+field+'" data-id="'+r.id+'" aria-label="'+ctx.esc(label)+'"><option value="">—</option>'+list.map(o=>'<option'+(o===value?' selected':'')+'>'+ctx.esc(o)+'</option>').join('')+'</select>';

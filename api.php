@@ -4,16 +4,21 @@ require __DIR__.'/app/bootstrap.php';
 require_once __DIR__.'/app/Appearance.php';
 try{
  $method=$_SERVER['REQUEST_METHOD'];$action=(string)($_GET['action']??'');
- if($action==='session'&&$method==='GET')fb_json(['success'=>true,'user'=>$_SESSION['fb_user']??null,'csrf'=>fb_csrf()]);
+ if($action==='session'&&$method==='GET')fb_json(['success'=>true,'user'=>empty($_SESSION['fb_user'])?null:Users::session(fb_db()),'csrf'=>fb_csrf()]);
  if($action==='login'&&$method==='POST'){
   fb_verify_csrf();$data=fb_input();$db=fb_db();$email=mb_strtolower(trim((string)($data['email']??'')));$q=$db->prepare('SELECT * FROM fb_users WHERE email=?');$q->execute([$email]);$user=$q->fetch();
   if($user&&!empty($user['locked_until'])&&strtotime($user['locked_until'])>time())fb_json(['error'=>'Muitas tentativas. Aguarde 15 minutos para tentar novamente.'],429);
   $password=(string)($data['password']??'');if(strlen($password)>1000||!$user||!password_verify($password,$user['password_hash']??'$2y$10$X5mbz2lP1z5UPVi0VEcK9OL1kUnRz/5NvxSyrB3DcQpHKHSDh.h9K')){
    if($user){$attempts=(int)$user['failed_attempts']+1;$q=$db->prepare('UPDATE fb_users SET failed_attempts=?,locked_until=? WHERE id=?');$q->execute([$attempts,$attempts>=8?date('Y-m-d H:i:s',time()+900):null,$user['id']]);}fb_json(['error'=>'E-mail ou senha incorretos.'],401);
   }
-  $db->prepare('UPDATE fb_users SET failed_attempts=0,locked_until=NULL WHERE id=?')->execute([$user['id']]);session_regenerate_id(true);$_SESSION['fb_user']=['id'=>(int)$user['id'],'name'=>$user['name'],'email'=>$user['email']];unset($_SESSION['fb_csrf']);fb_json(['success'=>true,'user'=>$_SESSION['fb_user'],'csrf'=>fb_csrf()]);
+  $access=Users::find($db,(int)$user['id']);if(!$access||!$access['active'])fb_json(['error'=>'Sua conta está desativada ou sem acesso. Consulte o administrador.'],403);
+  $db->prepare('UPDATE fb_users SET failed_attempts=0,locked_until=NULL WHERE id=?')->execute([$user['id']]);session_regenerate_id(true);$_SESSION['fb_user']=$access;unset($_SESSION['fb_csrf']);fb_json(['success'=>true,'user'=>$_SESSION['fb_user'],'csrf'=>fb_csrf()]);
  }
  $user=fb_user();$db=fb_db();if($method==='POST')fb_verify_csrf();elseif($method!=='GET')fb_json(['error'=>'Método não permitido.'],405);
+ Users::authorize($user,$action,$method);
+ if($action==='users'&&$method==='GET')fb_json(Users::listing($db));
+ if($action==='user_save'&&$method==='POST')fb_json(['success'=>true,'user'=>Users::save($db,fb_input(),$user['id'])]);
+ if($action==='password'&&$method==='POST'){Users::password($db,$user['id'],fb_input());fb_json(['success'=>true]);}
  if($action==='logout'&&$method==='POST'){$_SESSION=[];session_regenerate_id(true);fb_json(['success'=>true]);}
  if($action==='list'&&$method==='GET'){$page=max(1,(int)($_GET['page']??1));fb_json(Records::list($db,$_GET,25,($page-1)*25)+['page'=>$page,'per_page'=>25]);}
  if($action==='stats'&&$method==='GET')fb_json(Records::stats($db,$_GET));
@@ -42,7 +47,7 @@ try{
  if($action==='chat_history'&&$method==='GET'){$q=$db->prepare('SELECT id,question,answer,created_at FROM fb_chat WHERE user_id=? ORDER BY id DESC LIMIT 30');$q->execute([$user['id']]);$rows=array_reverse($q->fetchAll());foreach($rows as &$row)$row['answer']=json_decode($row['answer'],true);fb_json(['rows'=>$rows]);}
  if($action==='settings'&&$method==='GET')fb_json(['ia_configured'=>Assistant::configured($db),'model'=>Assistant::model($db),'database'=>fb_env('DB_NAME'),'user'=>$user]);
  if($action==='settings'&&$method==='POST'){$data=fb_input();$model=trim((string)($data['model']??''));if($model!==''&&!preg_match('/^[a-zA-Z0-9_.:-]{1,100}$/D',$model))throw new InvalidArgumentException('Nome do modelo inválido.');$db->beginTransaction();try{if(array_key_exists('model',$data)){$q=$db->prepare('INSERT INTO fb_settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');$q->execute(['assistant_model',$model]);}if(trim((string)($data['key']??''))!==''){$key=trim((string)$data['key']);if(strlen($key)>500||preg_match('/[\r\n]/',$key))throw new InvalidArgumentException('Chave inválida.');$q=$db->prepare('INSERT INTO fb_settings(setting_key,setting_value) VALUES(?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');$q->execute(['assistant_key',Assistant::encrypt($key)]);}
-   if(!empty($data['new_password'])){$q=$db->prepare('SELECT password_hash FROM fb_users WHERE id=?');$q->execute([$user['id']]);if(!password_verify((string)($data['current_password']??''),$q->fetchColumn()))throw new InvalidArgumentException('A senha atual está incorreta.');$password=(string)$data['new_password'];if(strlen($password)<6||strlen($password)>200)throw new InvalidArgumentException('Use uma senha de 6 a 200 caracteres.');$db->prepare('UPDATE fb_users SET password_hash=? WHERE id=?')->execute([password_hash($password,PASSWORD_DEFAULT),$user['id']]);session_regenerate_id(true);}$db->commit();fb_json(['success'=>true]);}catch(Throwable $e){$db->rollBack();throw $e;}}
+$db->commit();fb_json(['success'=>true]);}catch(Throwable $e){$db->rollBack();throw $e;}}
  // ---- PDF do WebAssist → sistema → FOR 024 ----
  if($action==='pdf_preview'&&$method==='POST'){
   $upload=$_FILES['file']??null;if(!$upload||$upload['error']!==UPLOAD_ERR_OK)throw new InvalidArgumentException('Selecione o PDF do relatório. Confira também o limite de upload da hospedagem.');

@@ -1,5 +1,13 @@
 # Publicar no GitHub e no Coolify
 
+## Atualização: boas-vindas e permissões (20/10/2026)
+
+As boas-vindas estão no Painel e no Monitoramento. O Monitoramento usa os totais do ano selecionado no FOR 024.
+
+Ao publicar esta versão pelo GitHub e fazer redeploy no Coolify, mantenha as variáveis do banco e `APP_KEY` existentes, além do volume `/var/www/html/storage`. Faça backup do banco antes. O entrypoint executa `scripts/install.php`, que aplica `database/atualizacao-usuarios.sql` sem substituir as senhas ou ocorrências existentes. A conta de menor ID vira Administrador na primeira migração; confira o acesso depois do deploy. Reexecutar preserva os perfis já definidos. A conta padrão só é criada se o banco não tiver usuários.
+
+Inclua no commit os novos arquivos `app/Users.php`, `assets/js/users.js`, `assets/welcome.svg`, `database/atualizacao-usuarios.sql` e `scripts/migrate-users.php`, além dos arquivos modificados. Nos logs do deploy, confirme que o instalador terminou sem erros de banco. Instruções completas em `ATUALIZACAO-USUARIOS.md`.
+
 ## 1. GitHub
 
 Crie um repositório **privado** no GitHub (ex.: `sistema-fb`) e, nesta pasta:
