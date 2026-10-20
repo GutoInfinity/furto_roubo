@@ -65,3 +65,5 @@
 .monitor-choice{margin:0}
 @media(max-width:1100px){.monitor-step-grid{grid-template-columns:1fr}}
 .monitor-selection{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--fb-border);background:var(--fb-surface);box-shadow:0 -6px 16px rgba(0,0,0,.12);border-radius:0 0 8px 8px}.monitor-selection span{font-size:13px}
+/* Monitoramento: ocorrência sem cidade fica em vermelho até ser preenchida */
+.monitor-table tr.monitor-no-city>td{background:rgba(214,57,57,.10)}.monitor-table tr.monitor-no-city>td:first-child{box-shadow:inset 3px 0 0 #d63939}.monitor-table tr.monitor-no-city .monitor-cell-cidade input{border-color:#d63939}
