@@ -7,6 +7,7 @@ RUN apt-get update \
  && a2enmod rewrite headers \
  && rm -rf /var/lib/apt/lists/*
 
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 COPY docker/php.ini /usr/local/etc/php/conf.d/zz-sistema-fb.ini
 COPY docker/apache.conf /etc/apache2/conf-enabled/zz-sistema-fb.conf
 COPY docker/entrypoint.sh /usr/local/bin/sistema-fb-entrypoint
