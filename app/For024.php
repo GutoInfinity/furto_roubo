@@ -172,13 +172,14 @@ final class For024 {
   $today=$today??new DateTimeImmutable('today');$all=self::origin($db);$years=[];
   foreach($all as $row){$y=self::year($row);if($y)$years[$y]=true;}krsort($years);$years=array_keys($years);
   $year=$year&&in_array($year,$years,true)?$year:($years[0]??(int)$today->format('Y'));
-  $count=['total'=>0,'pdf'=>0,'planilha'=>0,'localizados'=>0,'nao_localizados'=>0,'mais_30'=>0,'com_rastreador'=>0,'furtos'=>0,'roubos'=>0,'sem_cidade'=>0];$by=['mes'=>[],'cliente'=>[],'tipo'=>[],'cidade'=>[]];$rows=[];
+  $count=['total'=>0,'pdf'=>0,'planilha'=>0,'localizados'=>0,'nao_localizados'=>0,'mais_30'=>0,'com_rastreador'=>0,'furtos'=>0,'roubos'=>0,'sem_cidade'=>0];$by=['mes'=>[],'cliente'=>[],'tipo'=>[],'cidade'=>[]];$rows=[];$map=[];$unmapped=[];
   foreach($all as $row){
    $o=$row['original'];$s=$row['planilha'];$y=self::year($row);if($y!==$year)continue;
    $found=$s['localizado']==='SIM'||$s['recuperado']!=='';$days=$row['data_evento']?(int)(new DateTimeImmutable($row['data_evento']))->diff($today)->format('%r%a'):null;$pdf=($o['origem']??'')===self::ORIGIN;
    $count['total']++;$count[$pdf?'pdf':'planilha']++;$count[$found?'localizados':'nao_localizados']++;if(!$found&&$days!==null&&$days>30&&$y===(int)$today->format('Y'))$count['mais_30']++;
    if($s['rastreador']==='SIM')$count['com_rastreador']++;if($s['evento']==='FURTO')$count['furtos']++;if($s['evento']==='ROUBO')$count['roubos']++;if($s['cidade']==='')$count['sem_cidade']++;
    $month=$row['data_evento']&&(int)substr($row['data_evento'],0,4)===$y?(int)substr($row['data_evento'],5,2):(int)($o['mes']??0);if($month)$by['mes'][$month]=($by['mes'][$month]??0)+1;
+   if($s['cidade']!==''){$g=Geo::locate($s['cidade'],$s['estado']);if($g){$k=$g['nome'].'/'.$g['uf'];$map[$k]??=['cidade'=>mb_strtoupper(Geo::split($s['cidade'],$s['estado'])[0],'UTF-8'),'uf'=>$g['uf'],'lat'=>$g['lat'],'lng'=>$g['lng'],'total'=>0,'nao_localizados'=>0];$map[$k]['total']++;if(!$found)$map[$k]['nao_localizados']++;}else $unmapped[$s['cidade'].($s['estado']!==''?'/'.$s['estado']:'')]=($unmapped[$s['cidade'].($s['estado']!==''?'/'.$s['estado']:'')]??0)+1;}
    foreach(['cliente'=>$s['cliente']?:$row['associacao']?:'Não informado','tipo'=>$s['tipo']?:'Não informado','cidade'=>$s['cidade']!==''?$s['cidade'].($s['estado']!==''?'/'.$s['estado']:''):'Sem cidade'] as $k=>$v)$by[$k][$v]=($by[$k][$v]??0)+1;
    $rows[]=['id'=>(int)$row['id'],'registro'=>'FB-'.str_pad((string)$row['id'],6,'0',STR_PAD_LEFT),'origem'=>$pdf?'PDF':'Planilha','protocolo'=>(string)($o['protocolo']??''),'data'=>$row['data_evento'],'data_texto'=>$row['data_evento']?'':($s['date_text']?:$row['data_original']),'dias'=>$days,
     'cliente'=>$s['cliente']?:$row['associacao'],'beneficiario'=>$s['beneficiario']?:$row['vitima'],'placa'=>$row['placa'],'veiculo'=>$s['veiculo']?:$row['veiculo'],'arquivo'=>(string)($o['arquivo']??''),'importacao'=>(int)($o['importacao']??0),
@@ -188,7 +189,7 @@ final class For024 {
   usort($rows,fn($a,$b)=>[$b['data']??'',$b['id']]<=>[$a['data']??'',$a['id']]);
   $fmt=fn(array $m)=>array_map(fn($label,$total)=>['label'=>(string)$label,'total'=>$total],array_keys($m),$m);
   $months=[];foreach($by['mes'] as $m=>$t)$months[]=['label'=>ControlWorkbook::MONTHS[$m]??(string)$m,'total'=>$t];
-  return ['ano'=>$year,'anos'=>$years,'totais'=>$count,'por_mes'=>$months,'por_cliente'=>array_slice($fmt($by['cliente']),0,10),'por_tipo'=>$fmt($by['tipo']),'por_cidade'=>array_slice($fmt($by['cidade']),0,10),'rows'=>$rows,'imports'=>self::imports($db),'editaveis'=>self::EDITABLE,'template'=>ControlWorkbook::hasTemplate()];
+  return ['ano'=>$year,'anos'=>$years,'totais'=>$count,'por_mes'=>$months,'por_cliente'=>array_slice($fmt($by['cliente']),0,10),'por_tipo'=>$fmt($by['tipo']),'por_cidade'=>array_slice($fmt($by['cidade']),0,10),'mapa'=>['pontos'=>array_values($map),'sem_cidade'=>$count['sem_cidade'],'nao_encontradas'=>$unmapped],'rows'=>$rows,'imports'=>self::imports($db),'editaveis'=>self::EDITABLE,'template'=>ControlWorkbook::hasTemplate()];
  }
 
  /**

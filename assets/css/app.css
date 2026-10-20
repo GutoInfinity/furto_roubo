@@ -67,3 +67,9 @@
 .monitor-selection{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--fb-border);background:var(--fb-surface);box-shadow:0 -6px 16px rgba(0,0,0,.12);border-radius:0 0 8px 8px}.monitor-selection span{font-size:13px}
 /* Monitoramento: ocorrência sem cidade fica em vermelho até ser preenchida */
 .monitor-table tr.monitor-no-city>td{background:rgba(214,57,57,.10)}.monitor-table tr.monitor-no-city>td:first-child{box-shadow:inset 3px 0 0 #d63939}.monitor-table tr.monitor-no-city .monitor-cell-cidade input{border-color:#d63939}
+/* Mapa de ocorrências por cidade (Leaflet) */
+.monitor-map-card{margin-bottom:18px}.monitor-map{height:420px;border-radius:8px;overflow:hidden;background:var(--fb-bg);z-index:0}
+.monitor-map-legend{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin-top:10px}.monitor-map-key{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fb-ink)}.monitor-map-key i{display:inline-block;border-radius:50%}
+.monitor-map .leaflet-tooltip{font-size:12px}
+@media(max-width:700px){.monitor-map{height:320px}}
+.monitor-map .monitor-map-tiles-dark{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4)}

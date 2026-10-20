@@ -118,6 +118,7 @@ async function monitor(context){
   +'<article class="card"><header class="card-header"><h3 class="card-title">Tipo de veículo</h3></header><div class="card-body"><div class="plot"><canvas id="monitor-types" aria-label="Tipo de veículo"></canvas></div></div></article></div>'
   +'<div class="dashboard-grid"><article class="card"><header class="card-header"><h3 class="card-title">Clientes com mais ocorrências</h3></header><div class="card-body"><div class="plot"><canvas id="monitor-clients" aria-label="Clientes com mais ocorrências"></canvas></div></div></article>'
   +'<article class="card"><header class="card-header"><h3 class="card-title">Cidades</h3></header><div class="card-body"><div class="plot"><canvas id="monitor-cities" aria-label="Cidades com mais ocorrências"></canvas></div></div></article></div>'
+  +mapCard()
   +'<article class="card"><header class="card-header monitor-toolbar"><h3 class="card-title">Ocorrências · '+year+'</h3><div class="monitor-actions"><input id="monitor-search" type="search" class="form-control form-control-sm" placeholder="Placa, cliente, cidade, protocolo…" aria-label="Buscar ocorrência" value="'+ctx.esc(search)+'"><label class="small"><input type="checkbox" id="monitor-open" '+(onlyOpen?'checked':'')+'> Só não localizados</label><label class="small"><input type="checkbox" id="monitor-nocity" '+(noCity?'checked':'')+'> Só sem cidade</label></div></header><div id="monitor-table"></div><div class="monitor-selection" id="monitor-selection" hidden><span id="monitor-selection-text"></span><div class="d-flex flex-wrap gap-2"><button type="button" class="btn btn-sm btn-outline-secondary" id="monitor-clear"><i class="fas fa-xmark"></i> Limpar seleção</button><button type="button" class="btn btn-sm btn-success" id="monitor-export-bar"><i class="fas fa-file-excel"></i> Exportar Excel FOR 024</button></div></div></article>'
   :'<article class="card"><div class="card-body text-center py-5"><i class="fas fa-file-pdf fa-2x mb-3 text-secondary"></i><h3 class="card-title">Nenhuma ocorrência do FOR 024 ainda</h3><p class="text-secondary mb-0">Envie o PDF do WebAssist ou importe o histórico do Excel no quadro acima.</p></div></article>')
   +importsList(monitorData.imports);
@@ -128,7 +129,7 @@ async function monitor(context){
  $('#monitor-export-selected').onclick=()=>exportFile({ids:[...selected]},$('#monitor-export-selected'));
  if(!t.total){updateSelected();return;}
  if($('#monitor-year'))$('#monitor-year').onchange=e=>{year=Number(e.target.value);selected.clear();monitor(ctx);};
- drawCharts();drawTable();
+ drawCharts();drawMap();drawTable();
  $('#monitor-export-bar').onclick=e=>exportFile({ids:[...selected]},e.currentTarget);$('#monitor-clear').onclick=()=>{selected.clear();drawTable();};
  $('#monitor-search').oninput=e=>{search=e.target.value;shown=100;drawTable();};$('#monitor-open').onchange=e=>{onlyOpen=e.target.checked;shown=100;drawTable();};$('#monitor-nocity').onchange=e=>{noCity=e.target.checked;shown=100;drawTable();};
 }
@@ -146,6 +147,37 @@ async function uploadHistory(e){
  const input=e.currentTarget;if(!input.files.length)return;const form=new FormData();form.append('file',input.files[0]);const label=input.previousElementSibling,old=label.innerHTML;label.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Importando histórico…';
  try{const r=await ctx.request('for024_history',{method:'POST',form});ctx.toast(ctx.num(r.inserted)+' linha(s) do histórico importada(s)'+(r.merged?', '+ctx.num(r.merged)+' completaram ocorrências do PDF':'')+(r.skipped?', '+ctx.num(r.skipped)+' já estavam no sistema':'')+'.'+(r.template_salvo?' A planilha também passou a ser o modelo.':''));year=null;await monitor(ctx);}
  catch(error){ctx.toast(error.message,true);if(label.isConnected)label.innerHTML=old;}finally{input.value='';}
+}
+/* ---------- mapa por cidade ---------- */
+let map=null,mapObserver=null;
+const MAP_BINS=[[1,'1'],[2,'2 a 4'],[5,'5 a 9'],[10,'10 a 19'],[20,'20 ou mais']];
+// Um tom só (azul), do claro ao escuro conforme a quantidade; no tema escuro a escala se inverte (mais = mais claro).
+const MAP_COLORS={light:['#86b6ef','#5598e7','#2a78d6','#1c5cab','#104281'],dark:['#1c5cab','#2a78d6','#5598e7','#86b6ef','#b7d3f6']};
+const mapDark=()=>document.documentElement.dataset.bsTheme==='dark';
+const mapBin=n=>MAP_BINS.reduce((b,[min],i)=>n>=min?i:b,0);
+function mapCard(){
+ const m=monitorData.mapa||{pontos:[]},missing=Object.entries(m.nao_encontradas||{});
+ const notes=[m.sem_cidade?ctx.num(m.sem_cidade)+' ocorrência(s) sem cidade não aparecem no mapa.':'',missing.length?'Cidades não reconhecidas (confira a grafia): '+missing.map(([c,n])=>ctx.esc(c)+' ('+ctx.num(n)+')').join(', ')+'.':''].filter(Boolean);
+ return '<article class="card monitor-map-card"><header class="card-header"><h3 class="card-title">Mapa de ocorrências por cidade · '+ctx.esc(String(year))+'</h3><span class="ms-auto small text-secondary">Clique em um ponto para filtrar a tabela</span></header><div class="card-body">'
+  +(m.pontos.length?'<div id="monitor-map" class="monitor-map" role="img" aria-label="Mapa com '+ctx.num(m.pontos.length)+' cidades com ocorrências"></div><div class="monitor-map-legend" id="monitor-map-legend"></div>':'<p class="text-secondary mb-0">Nenhuma ocorrência com cidade preenchida neste ano.</p>')
+  +(notes.length?'<p class="small text-secondary mt-2 mb-0">'+notes.join(' ')+'</p>':'')+'</div></article>';
+}
+function drawMap(){
+ const el=$('#monitor-map');if(map){map.remove();map=null;}if(!el||!window.L)return;
+ const dark=mapDark(),colors=MAP_COLORS[dark?'dark':'light'],ring=getComputedStyle(document.documentElement).getPropertyValue('--fb-surface').trim()||(dark?'#1d293b':'#ffffff');
+ map=L.map(el,{scrollWheelZoom:false,attributionControl:true});
+ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,className:dark?'monitor-map-tiles-dark':'',attribution:'&copy; OpenStreetMap'}).addTo(map);
+ const points=[...monitorData.mapa.pontos].sort((a,b)=>b.total-a.total);
+ // Maiores primeiro: os pontos pequenos ficam por cima e continuam clicáveis.
+ for(const p of points){
+  const marker=L.circleMarker([p.lat,p.lng],{radius:Math.min(26,5+Math.sqrt(p.total)*3),color:ring,weight:2,fillColor:colors[mapBin(p.total)],fillOpacity:.9}).addTo(map);
+  marker.bindTooltip('<strong>'+ctx.esc(p.cidade)+'/'+ctx.esc(p.uf)+'</strong><br>'+ctx.num(p.total)+' ocorrência(s)'+(p.nao_localizados?' · '+ctx.num(p.nao_localizados)+' não localizada(s)':''),{direction:'top',offset:[0,-4]});
+  marker.on('click',()=>{search=p.cidade;shown=100;const box=$('#monitor-search');if(box)box.value=p.cidade;drawTable();$('#monitor-table')?.scrollIntoView({behavior:'smooth',block:'start'});});
+ }
+ map.fitBounds(L.latLngBounds(points.map(p=>[p.lat,p.lng])).pad(.15),{maxZoom:8});
+ $('#monitor-map-legend').innerHTML='<span class="small text-secondary">Ocorrências:</span>'+MAP_BINS.map(([,label],i)=>'<span class="monitor-map-key"><i style="background:'+colors[i]+';width:'+(8+i*3)+'px;height:'+(8+i*3)+'px"></i>'+label+'</span>').join('');
+ // Troca de tema claro/escuro: redesenha com o fundo e as cores do tema.
+ if(!mapObserver){mapObserver=new MutationObserver(()=>{if($('#monitor-map'))drawMap();});mapObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-bs-theme']});}
 }
 function drawCharts(){
  if(!window.Chart)return;const css=getComputedStyle(document.documentElement),muted=css.getPropertyValue('--fb-muted').trim(),border=css.getPropertyValue('--fb-border').trim(),palette=['#4263eb','#36a68b','#f0ba62','#d27a86','#83a1f1','#b5bed2','#7c5cc4','#2ea3c7'];
