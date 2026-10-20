@@ -83,9 +83,13 @@ function bindImports(after){
 let monitorData=null,selected=new Set(),search='',onlyOpen=false,noCity=false,year=null,charts=[],shown=100;
 const FIELD_LABEL={cidade:'Cidade',estado:'UF',tipo:'Tipo',rastreador:'Rastreador',localizado:'Localizado',evento:'Furto/Roubo',recuperado:'Recuperado'};
 function metric(label,value,note,icon){return '<article class="card metric"><span class="metric-label">'+ctx.esc(label)+'</span><span class="metric-value">'+ctx.num(value)+'</span><small>'+ctx.esc(note)+'</small><span class="metric-icon"><i class="fas fa-'+icon+'"></i></span></article>';}
+/** Quadro do FOR 024 recolhido ou aberto (lembrado neste navegador). */
+let stepsCollapsed=false;try{stepsCollapsed=localStorage.getItem('fb_for024_steps')==='min';}catch(e){}
+function stepsToggle(){return '<button type="button" class="btn btn-sm btn-ghost-secondary ms-auto" id="monitor-steps-toggle" aria-controls="monitor-steps-body" aria-expanded="'+!stepsCollapsed+'"><i class="fas fa-chevron-'+(stepsCollapsed?'down':'up')+'"></i> '+(stepsCollapsed?'Expandir':'Minimizar')+'</button>';}
+function bindStepsToggle(){const b=$('#monitor-steps-toggle');if(!b)return;b.onclick=()=>{stepsCollapsed=!stepsCollapsed;try{localStorage.setItem('fb_for024_steps',stepsCollapsed?'min':'max');}catch(e){}$('#monitor-steps-body').hidden=stepsCollapsed;b.outerHTML=stepsToggle();bindStepsToggle();};}
 function monitorActions(){
  const tpl=monitorData&&monitorData.template;
- return '<article class="card monitor-steps"><header class="card-header"><h3 class="card-title"><i class="fas fa-file-excel"></i> FOR 024 · Controle de Roubos e Furtos</h3></header><div class="card-body"><div class="monitor-step-grid">'
+ return '<article class="card monitor-steps"><header class="card-header"><h3 class="card-title"><i class="fas fa-file-excel"></i> FOR 024 · Controle de Roubos e Furtos</h3>'+stepsToggle()+'</header><div class="card-body" id="monitor-steps-body"'+(stepsCollapsed?' hidden':'')+'><div class="monitor-step-grid">'
   +'<section><h4><span class="step-number">1</span> Enviar o PDF do WebAssist</h4>'+pdfForm()+'</section>'
   +'<section><h4><span class="step-number">2</span> Preencher no sistema</h4><p class="small text-secondary">Cidade, UF, rastreador e furto/roubo não vêm no PDF: ficam em branco. Preencha direto na tabela abaixo; cada alteração é salva na hora e vai para o Excel.</p>'
   +'<label class="btn btn-sm btn-outline-secondary mb-0" for="monitor-history-file"><i class="fas fa-file-import"></i> Importar histórico do Excel</label><input id="monitor-history-file" type="file" accept=".xlsx" hidden><p class="small text-secondary mt-2 mb-0">Traz para o sistema as linhas já lançadas no FOR 024 (todas as abas por ano).</p></section>'
@@ -119,7 +123,7 @@ async function monitor(context){
   +importsList(monitorData.imports);
  bindImports(()=>monitor(ctx));
  $('#for024-pdf-form').onsubmit=e=>readPdf(e,afterMonitorImport);
- $('#monitor-history-file').onchange=uploadHistory;$('#monitor-template-file').onchange=e=>uploadTemplate(e,()=>monitor(ctx));
+ bindStepsToggle();$('#monitor-history-file').onchange=uploadHistory;$('#monitor-template-file').onchange=e=>uploadTemplate(e,()=>monitor(ctx));
  host.querySelectorAll('[data-for024-export]').forEach(b=>b.onclick=()=>exportFile({modo:b.dataset.for024Export},b,()=>monitor(ctx)));
  $('#monitor-export-selected').onclick=()=>exportFile({ids:[...selected]},$('#monitor-export-selected'));
  if(!t.total){updateSelected();return;}
