@@ -194,7 +194,7 @@ function drawCharts(){
 function visibleRows(){const q=search.trim().toLocaleLowerCase('pt-BR');return monitorData.rows.filter(r=>(!onlyOpen||r.em_busca)&&(!noCity||!r.cidade)&&(!q||[r.placa,r.cliente,r.beneficiario,r.protocolo,r.registro,r.veiculo,r.cidade,r.estado,r.tipo].join(' ').toLocaleLowerCase('pt-BR').includes(q)));}
 function editor(r,field){
  const options=monitorData.editaveis[field]||[],value=r[field]||'',label=FIELD_LABEL[field]+' de '+r.placa;
- if(ctx.can&&!ctx.can('write'))return '<span>'+ctx.esc(value||'—')+'</span>';
+ if(ctx.can&&!ctx.can('monitor_write'))return '<span>'+ctx.esc(value||'—')+'</span>';
  if(!options.length)return '<input class="form-control form-control-sm monitor-edit" data-edit="'+field+'" data-id="'+r.id+'" value="'+ctx.esc(value)+'" maxlength="120" placeholder="—" aria-label="'+ctx.esc(label)+'">';
  const list=options.includes(value)||!value?options:[value,...options];
  return '<select class="form-select form-select-sm monitor-edit" data-edit="'+field+'" data-id="'+r.id+'" aria-label="'+ctx.esc(label)+'"><option value="">—</option>'+list.map(o=>'<option'+(o===value?' selected':'')+'>'+ctx.esc(o)+'</option>').join('')+'</select>';

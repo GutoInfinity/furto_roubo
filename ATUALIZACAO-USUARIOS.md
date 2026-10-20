@@ -2,6 +2,19 @@
 
 A atualização usa somente o banco independente do Furto & Roubo configurado em `sistema-FB/.env` ou nas variáveis do servidor. Não utiliza o banco do sistema anterior.
 
+## Acessos separados aos setores
+
+Em **Usuários → Editar acesso**, escolha o Painel principal, o Monitoramento ou ambos, por meio de duas permissões independentes. A base geral de ocorrências também pode ser liberada separadamente. O perfil Administrador mantém acesso completo; use Operador ou Consulta para restringir uma pessoa.
+
+- **Somente Monitoramento:** marque Monitoramento e deixe Painel principal e Base geral desmarcados. Escolha as ações do FOR 024: editar campos, importar, exportar e excluir importações.
+- **Somente Painel principal:** marque Painel principal e desmarque Monitoramento. Esse acesso permite ver indicadores gerais; a lista de ocorrências e suas ações são permissões adicionais.
+- **Ambos:** marque os dois painéis e escolha os demais acessos. Também é possível liberar apenas a base geral, sem nenhum painel.
+- O login abre uma área permitida. Menus e botões bloqueados ficam ocultos, e o servidor impede o uso direto das rotas da outra área. A IA atual consulta a base geral, por isso exige essa permissão.
+
+**Para quem já publicou a primeira versão de usuários:** esta separação não exige novo SQL nem importar o banco. As permissões existentes continuam funcionando até serem editadas. Ao salvar uma conta, a seleção passa a ser explícita e as sessões antigas são encerradas. Os dados ficam no campo `permissions_json` já existente. Faça o deploy conjunto dos arquivos PHP e JavaScript para evitar versões incompatíveis.
+
+Os painéis usam uma base compartilhada: uma ocorrência do FOR 024 também pode aparecer na base geral para quem tem acesso a ela. Esta atualização controla áreas e ações; não atribui ocorrências individualmente a departamentos.
+
 ## O que muda
 
 - Novo menu **Usuários**, disponível aos administradores: cadastrar, editar, definir senha e desativar contas.
